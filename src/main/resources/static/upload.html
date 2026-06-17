@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文档入库测试</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            transition: all 0.3s;
+        }
+        .upload-area:hover {
+            border-color: #4CAF50;
+            background-color: #f9f9f9;
+        }
+        input[type="file"] {
+            margin: 10px 0;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+        .result.success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            display: block;
+        }
+        .result.error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            display: block;
+        }
+        .info {
+            background-color: #e7f3ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .info h3 {
+            margin-top: 0;
+        }
+        .info ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .info li {
+            margin: 5px 0;
+        }
+        label {
+            display: inline-block;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        input[type="number"] {
+            padding: 5px;
+            width: 100px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📄 文档入库测试页面</h1>
+        
+        <div class="info">
+            <h3>支持的文件格式</h3>
+            <ul>
+                <li><strong>PDF</strong> - .pdf 文件</li>
+                <li><strong>Word</strong> - .doc, .docx 文件</li>
+                <li><strong>Excel</strong> - .xls, .xlsx 文件</li>
+                <li><strong>图片</strong> - .png, .jpg, .jpeg, .bmp, .gif, .tiff 文件</li>
+            </ul>
+        </div>
+
+        <div class="upload-area">
+            <h3>选择文件上传</h3>
+            <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.bmp,.gif,.tiff">
+            <br>
+            <label for="chunkSize">切片大小(字符):</label>
+            <input type="number" id="chunkSize" value="500" min="100" max="2000" step="100">
+            <br><br>
+            <button id="uploadBtn" onclick="uploadFile()">上传并入库</button>
+            <button id="clearBtn" onclick="clearResult()">清空结果</button>
+        </div>
+
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        async function uploadFile() {
+            const fileInput = document.getElementById('fileInput');
+            const chunkSize = document.getElementById('chunkSize').value;
+            const resultDiv = document.getElementById('result');
+            const uploadBtn = document.getElementById('uploadBtn');
+
+            if (!fileInput.files || fileInput.files.length === 0) {
+                showResult('请先选择文件', false);
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = '上传中...';
+            showResult('正在上传和解析文件，请稍候...', null);
+
+            try {
+                const response = await fetch(`http://localhost:8080/api/rag/upload?chunkSize=${chunkSize}`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const resultHtml = `
+                        <h3>✅ 入库成功</h3>
+                        <p><strong>文档ID:</strong> ${data.docId}</p>
+                        <p><strong>文件名:</strong> ${data.fileName}</p>
+                        <p><strong>切片数量:</strong> ${data.chunkCount}</p>
+                        <p><strong>文本长度:</strong> ${data.textLength} 字符</p>
+                        <p><strong>处理时间:</strong> ${data.processingTime} ms</p>
+                    `;
+                    showResult(resultHtml, true);
+                } else {
+                    showResult(`❌ 入库失败: ${data.message}`, false);
+                }
+            } catch (error) {
+                showResult(`❌ 请求失败: ${error.message}`, false);
+            } finally {
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = '上传并入库';
+            }
+        }
+
+        function showResult(message, isSuccess) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = message;
+            resultDiv.className = 'result';
+            if (isSuccess === true) {
+                resultDiv.classList.add('success');
+            } else if (isSuccess === false) {
+                resultDiv.classList.add('error');
+            }
+        }
+
+        function clearResult() {
+            document.getElementById('result').innerHTML = '';
+            document.getElementById('result').className = 'result';
+            document.getElementById('fileInput').value = '';
+        }
+    </script>
+</body>
+</html>

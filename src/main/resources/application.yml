@@ -1,0 +1,65 @@
+# 服务器配置
+server:
+  # 服务器端口号
+  port: 8080
+
+# 文件上传配置
+spring:
+  servlet:
+    multipart:
+      # 单个文件最大大小
+      max-file-size: 50MB
+      # 单次请求最大大小
+      max-request-size: 100MB
+      # 启用multipart上传
+      enabled: true
+
+# Milvus向量数据库配置
+milvus:
+  # Milvus向量数据库的主机地址
+  host: localhost
+  # Milvus向量数据库的端口号
+  port: 19530
+  # Milvus数据库的用户名
+  username: root
+  # Milvus数据库的密码
+  password: Milvus
+  # 是否启用身份验证
+  use-authentication: true
+
+# RAG（检索增强生成）系统配置
+rag:
+  # RAG最大对话轮数
+  max-round: 5
+  # 每轮最多新增的文本片段数量
+  max-add-seg-per-round: 3
+  # 最大上下文长度（token数）
+  max-context-length: 8000
+  # 语义连贯性阈值，用于判断文本片段的语义关联度
+  semantic-cohesion-threshold: 0.6
+  # 向量检索时返回的Top-K结果数量
+  vector-top-k: 10
+  # 向量检索结果的权重
+  vector-weight: 0.7
+  # 重排序阈值，低于此分数的结果将被过滤
+  rerank-threshold: 0.3
+  # Milvus中存储向量的集合名称
+  collection-name: chinabank_rag
+  # 向量维度（根据embedding模型调整，默认768）
+  vector-dimension: 768
+  # Milvus主机地址
+  milvus-host: localhost
+  # Milvus端口
+  milvus-port: 19530
+  # Milvus用户名
+  milvus-username: root
+  # Milvus密码
+  milvus-password: Milvus
+  # 是否启用Milvus认证
+  milvus-use-auth: true
+  # 大语言模型API地址（使用硅基流动免费API）
+  llm-api-url: https://api.siliconflow.cn/v1
+  # 大语言模型API密钥（需到 https://cloud.siliconflow.cn 注册获取）
+  llm-api-key: sk-vuyqdpbduhhdtstwajycjfesrmywjtmfnxrqhljfkajxbugv
+  # 大语言模型名称（Qwen2.5-7B-Instruct 永久免费）
+  llm-model-name: Qwen/Qwen2.5-7B-Instruct
