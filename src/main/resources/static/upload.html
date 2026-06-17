@@ -156,9 +156,28 @@
                     body: formData
                 });
 
-                const data = await response.json();
+                // 先获取原始文本，避免 JSON 解析失败导致错误
+                const responseText = await response.text();
+                console.log('服务器响应:', responseText);
+                console.log('HTTP 状态码:', response.status);
 
-                if (data.success) {
+                let data;
+                try {
+                    // 尝试解析 JSON
+                    data = responseText ? JSON.parse(responseText) : null;
+                } catch (parseError) {
+                    console.warn('JSON 解析失败，原始响应:', responseText);
+                    // 如果解析失败但 HTTP 状态码是成功的，显示原始响应
+                    if (response.ok) {
+                        showResult(`✅ 请求成功 (HTTP ${response.status})<br><p>服务器返回: ${responseText || '空响应'}</p>`, true);
+                        return;
+                    } else {
+                        showResult(`❌ 请求失败 (HTTP ${response.status}): ${responseText || '未知错误'}`, false);
+                        return;
+                    }
+                }
+
+                if (data && data.success) {
                     const resultHtml = `
                         <h3>✅ 入库成功</h3>
                         <p><strong>文档ID:</strong> ${data.docId}</p>
@@ -168,11 +187,14 @@
                         <p><strong>处理时间:</strong> ${data.processingTime} ms</p>
                     `;
                     showResult(resultHtml, true);
+                } else if (data) {
+                    showResult(`❌ 入库失败: ${data.message || '未知错误'}`, false);
                 } else {
-                    showResult(`❌ 入库失败: ${data.message}`, false);
+                    showResult(`❌ 响应数据为空`, false);
                 }
             } catch (error) {
-                showResult(`❌ 请求失败: ${error.message}`, false);
+                console.error('请求异常:', error);
+                showResult(`❌ 请求异常: ${error.message}`, false);
             } finally {
                 uploadBtn.disabled = false;
                 uploadBtn.textContent = '上传并入库';

@@ -8,9 +8,9 @@ spring:
   servlet:
     multipart:
       # 单个文件最大大小
-      max-file-size: 50MB
+      max-file-size: 5000MB
       # 单次请求最大大小
-      max-request-size: 100MB
+      max-request-size: 5000MB
       # 启用multipart上传
       enabled: true
 
@@ -63,3 +63,46 @@ rag:
   llm-api-key: sk-vuyqdpbduhhdtstwajycjfesrmywjtmfnxrqhljfkajxbugv
   # 大语言模型名称（Qwen2.5-7B-Instruct 永久免费）
   llm-model-name: Qwen/Qwen2.5-7B-Instruct
+
+# 标签提取配置
+tag-extractor:
+  # 业务标签关键词（金融领域）
+  business-keywords:
+    - 外汇
+    - 汇率
+    - 结汇
+    - 购汇
+    - 跨境
+    - 结算
+    - 信用证
+    - 贸易融资
+    - 国际结算
+    - 外币
+    - USD
+    - EUR
+    - GBP
+    - JPY
+    - 存款
+    - 贷款
+    - 利率
+    - 理财
+    - 投资
+    - 基金
+    - 保险
+    - 信用卡
+    - 借记卡
+    - 转账
+    - 汇款
+    - SWIFT
+    - 清算
+  # 实体标签正则配置
+  entity-patterns:
+    currency: "[A-Z]{3}"
+    rate: "\\d+\\.?\\d*%"
+    date: "\\d{4}[-/年]\\d{1,2}[-/月]\\d{1,2}"
+  # 主题标签配置
+  topic-patterns:
+    chapter-prefixes:
+      - "^[第\\d]+[章节].*"
+      - "^\\d+[、.].*"
+    min-length-for-long-text: 500

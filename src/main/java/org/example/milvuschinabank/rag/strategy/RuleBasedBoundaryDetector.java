@@ -106,12 +106,15 @@ public class RuleBasedBoundaryDetector implements SemanticBoundaryDetector {
     }
 
     /**
-     * 生成 n-gram
+     * 生成 n-gram（优化版：使用采样减少计算量）
      */
     private Set<String> generateNgrams(String text, int n) {
         Set<String> ngrams = new HashSet<>();
-
-        for (int i = 0; i <= text.length() - n; i++) {
+        
+        // 对于长文本，使用采样策略避免生成过多 n-gram
+        int step = Math.max(1, text.length() / 100); // 最多生成约 100 个 n-gram
+        
+        for (int i = 0; i <= text.length() - n; i += step) {
             ngrams.add(text.substring(i, i + n));
         }
 

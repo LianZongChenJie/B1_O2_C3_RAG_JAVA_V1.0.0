@@ -77,10 +77,12 @@ public class MilvusChunkRepository {
         try {
             logger.info("尝试连接 Milvus: {}:{}", ragConfig.getMilvusHost(), ragConfig.getMilvusPort());
             
-            // 构建连接参数
+            // 构建连接参数，添加超时配置
             ConnectParam.Builder connectBuilder = ConnectParam.newBuilder()
                     .withHost(ragConfig.getMilvusHost())
-                    .withPort(ragConfig.getMilvusPort());
+                    .withPort(ragConfig.getMilvusPort())
+                    .withConnectTimeout(3, java.util.concurrent.TimeUnit.SECONDS) // 连接超时 3 秒
+                    .withKeepAliveTime(5, java.util.concurrent.TimeUnit.SECONDS); // 保活时间 5 秒
 
             // 如果启用认证，添加用户名和密码
             if (ragConfig.isMilvusUseAuth()) {
@@ -89,9 +91,12 @@ public class MilvusChunkRepository {
             }
 
             // 创建客户端
+            logger.info("正在创建 MilvusServiceClient...");
             milvusClient = new MilvusServiceClient(connectBuilder.build());
+            logger.info("MilvusServiceClient 创建成功");
             
             // 测试连接 - 列出所有 collections
+            logger.info("正在测试 Milvus 连接...");
             R<Boolean> hasCollection = milvusClient.hasCollection(
                     HasCollectionParam.newBuilder()
                             .withCollectionName(ragConfig.getCollectionName())
@@ -158,7 +163,7 @@ public class MilvusChunkRepository {
         fieldsSchema.add(FieldType.newBuilder()
                 .withName("seg_id")
                 .withDataType(DataType.VarChar)
-                .withMaxLength(128)
+                .withMaxLength(256)
                 .withPrimaryKey(true)
                 .withAutoID(false)
                 .build());
@@ -167,7 +172,7 @@ public class MilvusChunkRepository {
         fieldsSchema.add(FieldType.newBuilder()
                 .withName("doc_id")
                 .withDataType(DataType.VarChar)
-                .withMaxLength(128)
+                .withMaxLength(256)
                 .build());
 
         // pos
@@ -180,14 +185,14 @@ public class MilvusChunkRepository {
         fieldsSchema.add(FieldType.newBuilder()
                 .withName("pre_seg_id")
                 .withDataType(DataType.VarChar)
-                .withMaxLength(128)
+                .withMaxLength(256)
                 .build());
 
         // next_seg_id
         fieldsSchema.add(FieldType.newBuilder()
                 .withName("next_seg_id")
                 .withDataType(DataType.VarChar)
-                .withMaxLength(128)
+                .withMaxLength(256)
                 .build());
 
         // tags
@@ -358,6 +363,7 @@ public class MilvusChunkRepository {
      */
     private void insertToMilvus(List<DocumentChunk> chunks) {
         long startTime = System.currentTimeMillis();
+        logger.info("开始插入 {} 条切片数据到 Milvus", chunks.size());
 
         try {
             // 构建插入字段
@@ -374,6 +380,7 @@ public class MilvusChunkRepository {
             List<Boolean> isSemanticBoundaries = new ArrayList<>();
             List<List<Float>> vectors = new ArrayList<>();
 
+            logger.info("正在构建插入字段...");
             for (DocumentChunk chunk : chunks) {
                 segIds.add(chunk.getSegId());
                 docIds.add(chunk.getDocId());
@@ -394,6 +401,7 @@ public class MilvusChunkRepository {
                     vectors.add(generateZeroVector(ragConfig.getVectorDimension()));
                 }
             }
+            logger.info("字段构建完成，耗时: {} ms", System.currentTimeMillis() - startTime);
 
             fields.add(new InsertParam.Field("seg_id", segIds));
             fields.add(new InsertParam.Field("doc_id", docIds));
@@ -407,12 +415,16 @@ public class MilvusChunkRepository {
             fields.add(new InsertParam.Field("vector", vectors));
 
             // 执行插入
+            logger.info("正在执行 Milvus 插入操作...");
+            long insertStartTime = System.currentTimeMillis();
             InsertParam insertParam = InsertParam.newBuilder()
                     .withCollectionName(ragConfig.getCollectionName())
                     .withFields(fields)
                     .build();
 
             R<MutationResult> response = milvusClient.insert(insertParam);
+            long insertTime = System.currentTimeMillis() - insertStartTime;
+            logger.info("Milvus 插入操作完成，耗时: {} ms", insertTime);
             
             if (response.getStatus() == R.Status.Success.getCode()) {
                 long endTime = System.currentTimeMillis();
@@ -842,14 +854,12 @@ public class MilvusChunkRepository {
     }
 
     /**
-     * 生成零向量
+     * 生成零向量（优化版：使用 Arrays.fill）
      */
     private List<Float> generateZeroVector(int dimension) {
-        List<Float> vector = new ArrayList<>(dimension);
-        for (int i = 0; i < dimension; i++) {
-            vector.add(0.0f);
-        }
-        return vector;
+        Float[] array = new Float[dimension];
+        java.util.Arrays.fill(array, 0.0f);
+        return java.util.Arrays.asList(array);
     }
 
     /**

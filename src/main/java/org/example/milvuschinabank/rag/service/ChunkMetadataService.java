@@ -53,9 +53,13 @@ public class ChunkMetadataService {
      * @return 带有完整元数据的切片列表
      */
     public List<DocumentChunk> processChunks(List<String> rawChunks, String docId) {
+        long startTime = System.currentTimeMillis();
+        
         if (rawChunks == null || rawChunks.isEmpty()) {
             return new ArrayList<>();
         }
+
+        logger.info("开始处理 {} 个切片", rawChunks.size());
 
         List<DocumentChunk> processedChunks = new ArrayList<>();
 
@@ -91,8 +95,17 @@ public class ChunkMetadataService {
             processedChunks.add(chunk);
         }
 
+        logger.info("标签提取完成，共处理 {} 个切片", processedChunks.size());
+
+        long tagTime = System.currentTimeMillis();
+
         // 检测语义割裂
+        logger.info("开始检测语义割裂...");
         detectSemanticBoundaries(processedChunks);
+        long boundaryTime = System.currentTimeMillis();
+        logger.info("语义割裂检测完成，耗时: {} ms", boundaryTime - tagTime);
+
+        logger.info("切片处理完成，总耗时: {} ms", System.currentTimeMillis() - startTime);
 
         return processedChunks;
     }
@@ -146,9 +159,14 @@ public class ChunkMetadataService {
 
     /**
      * 生成切片唯一ID
+     * 格式：{docId}_seg_{pos}_{shortHash}
+     * 使用 MD5 哈希的前 8 位确保 ID 长度可控，避免超过 Milvus 字段限制
      */
     private String generateSegId(String docId, int pos) {
-        return docId + "_seg_" + pos + "_" + UUID.randomUUID().toString().substring(0, 8);
+        String hash = Integer.toHexString(UUID.randomUUID().hashCode());
+        // 确保哈希字符串至少 8 位，不足则左侧补 0
+        String shortHash = String.format("%8s", hash).replace(' ', '0').substring(0, 8);
+        return docId + "_seg_" + pos + "_" + shortHash;
     }
 
     /**
