@@ -598,12 +598,37 @@ public class MilvusChunkRepository {
 
         if (milvusConnected && milvusClient != null) {
             try {
-                // 查询 pre_seg_id 或 next_seg_id 在 segIds 列表中的切片
+                // 先查询给定 segIds 的切片，获取它们的 pre_seg_id 和 next_seg_id
                 String segIdsStr = segIds.stream()
                         .map(id -> "\"" + id + "\"")
                         .collect(Collectors.joining(", "));
-                String filter = "pre_seg_id in [" + segIdsStr + "] or next_seg_id in [" + segIdsStr + "]";
-                return executeQuery(filter);
+                String filter = "seg_id in [" + segIdsStr + "]";
+                List<DocumentChunk> sourceChunks = executeQuery(filter);
+
+                // 收集所有相邻切片的 segId
+                Set<String> adjacentSegIds = new HashSet<>();
+                for (DocumentChunk chunk : sourceChunks) {
+                    if (chunk.getPreSegId() != null) {
+                        adjacentSegIds.add(chunk.getPreSegId());
+                    }
+                    if (chunk.getNextSegId() != null) {
+                        adjacentSegIds.add(chunk.getNextSegId());
+                    }
+                }
+
+                // 排除原始 segIds 本身
+                adjacentSegIds.removeAll(new HashSet<>(segIds));
+
+                if (adjacentSegIds.isEmpty()) {
+                    return new ArrayList<>();
+                }
+
+                // 查询相邻切片
+                String adjacentSegIdsStr = adjacentSegIds.stream()
+                        .map(id -> "\"" + id + "\"")
+                        .collect(Collectors.joining(", "));
+                String adjacentFilter = "seg_id in [" + adjacentSegIdsStr + "]";
+                return executeQuery(adjacentFilter);
             } catch (Exception e) {
                 logger.error("从 Milvus 查询相邻切片失败: {}，降级到模拟模式", e.getMessage());
             }
@@ -622,6 +647,9 @@ public class MilvusChunkRepository {
                 }
             }
         }
+
+        // 排除原始 segIds 本身
+        adjacentSegIds.removeAll(new HashSet<>(segIds));
 
         return adjacentSegIds.stream()
                 .map(chunkStore::get)

@@ -96,6 +96,11 @@ public class RagConfig {
      */
     private int vectorDimension = 768;
 
+    /**
+     * 内容重叠检测阈值（字符数）
+     */
+    private int overlapDetectionThreshold = 20;
+
     // Getters and Setters
 
     public int getMaxRound() {
@@ -232,5 +237,13 @@ public class RagConfig {
 
     public void setVectorDimension(int vectorDimension) {
         this.vectorDimension = vectorDimension;
+    }
+
+    public int getOverlapDetectionThreshold() {
+        return overlapDetectionThreshold;
+    }
+
+    public void setOverlapDetectionThreshold(int overlapDetectionThreshold) {
+        this.overlapDetectionThreshold = overlapDetectionThreshold;
     }
 }

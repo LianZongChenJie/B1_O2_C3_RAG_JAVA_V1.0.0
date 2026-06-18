@@ -85,11 +85,15 @@ public class ReActRetrievalService {
             }
 
             // 3. 决策动作：生成补全查询（第二轮及以后）
+            // 补全查询用于指导检索策略和后续处理，但向量检索仍使用原始 queryVector
+            // 原因：原始 queryVector 保持了用户查询的原始语义，避免补全查询引入的语义漂移
             String refinedQuery = userQuery;
             if (state.getCurrentRound() > 1) {
                 refinedQuery = contextCompleter.generateRefinedQuery(
                         userQuery, state.getCurrentContext(), state.getCurrentRound());
                 logger.info("补全查询: {}", refinedQuery);
+                // TODO: 当接入 Embedding 服务后，可基于 refinedQuery 生成新的 queryVector
+                // 用于更精确的向量检索。当前使用原始 queryVector 保证语义一致性。
             }
 
             // 4. 执行召回
@@ -135,47 +139,84 @@ public class ReActRetrievalService {
 
         // 1. 向量召回（第一轮）或补全查询召回（后续轮次）
         List<DocumentChunk> vectorResults = vectorSearch(queryVector, ragConfig.getVectorTopK());
+        logger.info("向量召回返回 {} 个切片", vectorResults.size());
 
         // 2. 过滤已召回的切片（全局去重）
         Set<String> existingSegIds = new HashSet<>(state.getTotalSegIds());
         List<DocumentChunk> newResults = vectorResults.stream()
+                .filter(chunk -> chunk != null && chunk.getSegId() != null)
                 .filter(chunk -> !existingSegIds.contains(chunk.getSegId()))
                 .limit(ragConfig.getMaxAddSegPerRound())
                 .collect(Collectors.toList());
+        logger.info("去重后新增向量召回切片 {} 个", newResults.size());
 
         // 3. 拉取相邻切片修复语序截断
         List<DocumentChunk> adjacentChunks = fetchAdjacentChunks(newResults);
+        logger.info("拉取相邻切片 {} 个", adjacentChunks.size());
 
-        // 4. 合并本轮结果
+        // 4. 合并本轮结果（向量召回 + 相邻切片）
         Set<String> addedSegIds = new HashSet<>();
+
+        // 4.1 添加向量召回结果
         for (DocumentChunk chunk : newResults) {
             results.add(new RetrievalResult(
                     chunk.getSegId(), 1.0, state.getCurrentRound(), "vector"));
             addedSegIds.add(chunk.getSegId());
         }
 
+        // 4.2 添加相邻切片（去重）
+        int adjacentAddedCount = 0;
         for (DocumentChunk chunk : adjacentChunks) {
-            if (!existingSegIds.contains(chunk.getSegId()) && !addedSegIds.contains(chunk.getSegId())) {
+            if (chunk != null && chunk.getSegId() != null
+                    && !existingSegIds.contains(chunk.getSegId())
+                    && !addedSegIds.contains(chunk.getSegId())) {
                 results.add(new RetrievalResult(
                         chunk.getSegId(), 0.8, state.getCurrentRound(), "adjacent"));
                 addedSegIds.add(chunk.getSegId());
+                adjacentAddedCount++;
             }
         }
+        logger.info("新增相邻切片 {} 个（去重后）", adjacentAddedCount);
 
         // 5. 更新全局去重集合
         state.getTotalSegIds().addAll(addedSegIds);
+        logger.info("本轮共新增 {} 个切片ID到全局集合，当前总计 {} 个",
+                addedSegIds.size(), state.getTotalSegIds().size());
 
         return results;
     }
 
     /**
      * 向量检索
+     * 调用 MilvusChunkRepository 执行真正的向量检索
      */
     private List<DocumentChunk> vectorSearch(List<Float> queryVector, int topK) {
-        // TODO: 实现 Milvus 向量检索
-        // 这里需要根据实际的 Milvus SDK 版本实现
         logger.info("执行向量检索，TopK: {}", topK);
-        return new ArrayList<>();
+
+        if (queryVector == null || queryVector.isEmpty()) {
+            logger.warn("查询向量为空，返回空结果");
+            return new ArrayList<>();
+        }
+
+        try {
+            // 调用 MilvusChunkRepository 进行向量检索
+            List<MilvusChunkRepository.SearchResult> searchResults =
+                    chunkRepository.searchByVector(queryVector, topK, null);
+
+            // 将 SearchResult 转换为 DocumentChunk
+            List<DocumentChunk> chunks = searchResults.stream()
+                    .map(MilvusChunkRepository.SearchResult::getChunk)
+                    .filter(chunk -> chunk != null && chunk.getSegId() != null)
+                    .collect(Collectors.toList());
+
+            logger.info("向量检索完成，返回 {} 个切片", chunks.size());
+            return chunks;
+
+        } catch (Exception e) {
+            logger.error("向量检索失败: {}", e.getMessage(), e);
+            // 降级返回空列表
+            return new ArrayList<>();
+        }
     }
 
     /**
@@ -198,7 +239,17 @@ public class ReActRetrievalService {
      */
     private List<DocumentChunk> mergeAndRerank(ReActState state) {
         // 1. 根据 totalSegIds 查询所有切片
-        List<DocumentChunk> allChunks = chunkRepository.queryBySegIds(state.getTotalSegIds());
+        List<String> segIds = state.getTotalSegIds();
+        if (segIds == null || segIds.isEmpty()) {
+            logger.warn("全局切片ID集合为空，返回空列表");
+            return new ArrayList<>();
+        }
+
+        List<DocumentChunk> allChunks = chunkRepository.queryBySegIds(segIds);
+        if (allChunks == null || allChunks.isEmpty()) {
+            logger.warn("查询切片返回空，返回空列表");
+            return new ArrayList<>();
+        }
 
         // 2. 按 pos 升序强制顺序规整
         allChunks.sort(Comparator.comparingInt(DocumentChunk::getPos));
@@ -210,11 +261,16 @@ public class ReActRetrievalService {
      * 构建上下文文本
      */
     private String buildContext(List<DocumentChunk> chunks) {
+        if (chunks == null || chunks.isEmpty()) {
+            return "";
+        }
+
         StringBuilder context = new StringBuilder();
 
+        // 使用连续序号而非 pos+1，避免编号跳号
         for (int i = 0; i < chunks.size(); i++) {
             DocumentChunk chunk = chunks.get(i);
-            context.append("[段落 ").append(chunk.getPos() + 1).append("]\n");
+            context.append("[段落 ").append(i + 1).append("]\n");
             context.append(chunk.getContent());
             context.append("\n\n");
         }
@@ -227,7 +283,17 @@ public class ReActRetrievalService {
      */
     private List<DocumentChunk> postProcess(ReActState state) {
         // 1. 查询最终全集
-        List<DocumentChunk> finalChunks = chunkRepository.queryBySegIds(state.getTotalSegIds());
+        List<String> segIds = state.getTotalSegIds();
+        if (segIds == null || segIds.isEmpty()) {
+            logger.warn("全局切片ID集合为空，返回空列表");
+            return new ArrayList<>();
+        }
+
+        List<DocumentChunk> finalChunks = chunkRepository.queryBySegIds(segIds);
+        if (finalChunks == null || finalChunks.isEmpty()) {
+            logger.warn("查询最终切片返回空，返回空列表");
+            return new ArrayList<>();
+        }
 
         // 2. 按 pos 升序排序
         finalChunks.sort(Comparator.comparingInt(DocumentChunk::getPos));
@@ -237,11 +303,10 @@ public class ReActRetrievalService {
 
         // 4. 剔除空文本与乱码
         finalChunks = finalChunks.stream()
-                .filter(chunk -> isValidContent(chunk.getContent()))
+                .filter(chunk -> chunk != null && isValidContent(chunk.getContent()))
                 .collect(Collectors.toList());
 
-        // 5. 再次按 pos 排序（确保顺序）
-        finalChunks.sort(Comparator.comparingInt(DocumentChunk::getPos));
+        // 注：合并重复内容后 pos 顺序已保持不变，无需再次排序
 
         return finalChunks;
     }
@@ -288,8 +353,8 @@ public class ReActRetrievalService {
             return true;
         }
 
-        // 检查尾部/头部重叠（重叠超过 20 字符）
-        int overlapLength = 20;
+        // 检查尾部/头部重叠（使用配置化的重叠阈值）
+        int overlapLength = ragConfig.getOverlapDetectionThreshold();
         if (content1.length() >= overlapLength && content2.length() >= overlapLength) {
             String tail = content1.substring(content1.length() - overlapLength);
             String head = content2.substring(0, overlapLength);
@@ -303,7 +368,7 @@ public class ReActRetrievalService {
      * 合并重叠内容
      */
     private String mergeOverlap(String content1, String content2) {
-        int overlapLength = 20;
+        int overlapLength = ragConfig.getOverlapDetectionThreshold();
 
         if (content1.length() >= overlapLength && content2.length() >= overlapLength) {
             String tail = content1.substring(content1.length() - overlapLength);
