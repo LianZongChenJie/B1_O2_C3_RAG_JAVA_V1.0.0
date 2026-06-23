@@ -39,7 +39,7 @@ public class TerminationControlTest {
         
         int maxRound = 5;
         ReActState state = new ReActState(maxRound, 8000, 3);
-        state.setTotalSegIds(new ArrayList<>());
+        // totalSegIds 已在构造函数中初始化
         state.setRoundResults(new ArrayList<>());
 
         logger.info("最大轮次限制: {}", maxRound);
@@ -74,7 +74,6 @@ public class TerminationControlTest {
         
         int maxAddSeg = 3;
         ReActState state = new ReActState(5, 8000, maxAddSeg);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
 
         logger.info("单轮最大新增切片数: {}", maxAddSeg);
@@ -116,7 +115,6 @@ public class TerminationControlTest {
         
         int maxContextLength = 8000;
         ReActState state = new ReActState(5, maxContextLength, 3);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
 
         logger.info("最大上下文长度: {}", maxContextLength);
@@ -154,7 +152,6 @@ public class TerminationControlTest {
         logger.info("\n========== 测试4：循环条件控制 - Round 轮次计数 ==========");
         
         ReActState state = new ReActState(5, 8000, 3);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
 
         logger.info("初始轮次: {}", state.getCurrentRound());
@@ -180,7 +177,6 @@ public class TerminationControlTest {
         logger.info("\n========== 测试5：循环条件控制 - IsFinish 完成标志 ==========");
         
         ReActState state = new ReActState(5, 8000, 3);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
 
         logger.info("初始状态: isFinished={}", state.isFinished());
@@ -208,7 +204,6 @@ public class TerminationControlTest {
         
         int maxContextLength = 100;
         ReActState state = new ReActState(5, maxContextLength, 3);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
 
         int[] testCases = {0, 50, 99, 100, 150};
@@ -234,7 +229,6 @@ public class TerminationControlTest {
         logger.info("\n========== 测试7：终止条件优先级 - 主动终止优先 ==========");
         
         ReActState state = new ReActState(5, 100, 3);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
 
         state.setCurrentContextLength(150);
@@ -257,7 +251,6 @@ public class TerminationControlTest {
         logger.info("\n========== 测试8：终止条件优先级 - 轮次限制优先于长度超限 ==========");
         
         ReActState state = new ReActState(3, 100, 3);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
 
         state.nextRound();
@@ -282,7 +275,6 @@ public class TerminationControlTest {
         logger.info("\n========== 测试9：多轮完整流程 - 正常终止 ==========");
         
         ReActState state = new ReActState(5, 8000, 3);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
 
         for (int round = 1; round <= 5; round++) {
@@ -322,7 +314,6 @@ public class TerminationControlTest {
         logger.info("\n========== 测试10：多轮完整流程 - 上下文超长终止 ==========");
         
         ReActState state = new ReActState(10, 200, 3);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
 
         int totalLength = 0;
@@ -367,7 +358,6 @@ public class TerminationControlTest {
         logger.info("\n========== 测试11：多轮完整流程 - 质量达标主动终止 ==========");
         
         ReActState state = new ReActState(5, 8000, 3);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
 
         for (int round = 1; round <= 5; round++) {
@@ -402,7 +392,6 @@ public class TerminationControlTest {
         logger.info("\n========== 测试12：边界条件 - MaxRound=1 ==========");
         
         ReActState state = new ReActState(1, 8000, 3);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
 
         logger.info("最大轮次: 1");
@@ -425,7 +414,6 @@ public class TerminationControlTest {
         logger.info("\n========== 测试13：边界条件 - MaxContextLen=0 ==========");
         
         ReActState state = new ReActState(5, 0, 3);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
 
         logger.info("最大上下文长度: 0");
@@ -445,7 +433,6 @@ public class TerminationControlTest {
         logger.info("\n========== 测试14：边界条件 - MaxAddSeg=0 ==========");
         
         ReActState state = new ReActState(5, 8000, 0);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
 
         logger.info("单轮最大新增切片数: 0");
@@ -481,7 +468,6 @@ public class TerminationControlTest {
         int maxAddSeg = 3;
         
         ReActState state = new ReActState(maxRound, maxContextLength, maxAddSeg);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
 
         logger.info("配置: MaxRound={}, MaxContextLen={}, MaxAddSeg={}", 

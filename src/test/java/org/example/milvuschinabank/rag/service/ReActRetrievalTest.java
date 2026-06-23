@@ -214,7 +214,7 @@ public class ReActRetrievalTest {
         logger.info("\n========== 测试1：ReActState 轮次控制 ==========");
         
         ReActState state = new ReActState(3, 8000, 3);
-        state.setTotalSegIds(new ArrayList<>());
+        // totalSegIds 已在构造函数中初始化
         state.setRoundResults(new ArrayList<>());
 
         assertEquals(0, state.getCurrentRound(), "初始轮次应为0");
@@ -243,7 +243,6 @@ public class ReActRetrievalTest {
         logger.info("\n========== 测试2：ReActState 上下文长度限制 ==========");
         
         ReActState state = new ReActState(5, 100, 3);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
 
         state.setCurrentContextLength(50);
@@ -266,7 +265,6 @@ public class ReActRetrievalTest {
         logger.info("\n========== 测试3：ReActState 主动终止 ==========");
         
         ReActState state = new ReActState(5, 8000, 3);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
 
         state.finish("质量达标");
@@ -398,7 +396,6 @@ public class ReActRetrievalTest {
         logger.info("\n========== 测试9：全局去重逻辑 ==========");
         
         ReActState state = new ReActState(5, 8000, 3);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
 
         List<String> segIds = Arrays.asList("seg_1", "seg_2", "seg_3");
@@ -499,7 +496,6 @@ public class ReActRetrievalTest {
         logger.info("\n========== 测试13：ReActState 多轮状态流转 ==========");
         
         ReActState state = new ReActState(3, 8000, 3);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
 
         for (int round = 1; round <= 3; round++) {

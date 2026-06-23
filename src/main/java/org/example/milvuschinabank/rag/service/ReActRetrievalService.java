@@ -50,7 +50,7 @@ public class ReActRetrievalService {
                 ragConfig.getMaxAddSegPerRound()
         );
 
-        state.setTotalSegIds(new ArrayList<>());
+        // totalSegIds 已在构造函数中初始化
         state.setRoundResults(new ArrayList<>());
 
         // 多轮循环
@@ -142,7 +142,7 @@ public class ReActRetrievalService {
         logger.info("向量召回返回 {} 个切片", vectorResults.size());
 
         // 2. 过滤已召回的切片（全局去重）
-        Set<String> existingSegIds = new HashSet<>(state.getTotalSegIds());
+        Set<String> existingSegIds = state.getTotalSegIds();
         List<DocumentChunk> newResults = vectorResults.stream()
                 .filter(chunk -> chunk != null && chunk.getSegId() != null)
                 .filter(chunk -> !existingSegIds.contains(chunk.getSegId()))
@@ -168,7 +168,7 @@ public class ReActRetrievalService {
         int adjacentAddedCount = 0;
         for (DocumentChunk chunk : adjacentChunks) {
             if (chunk != null && chunk.getSegId() != null
-                    && !existingSegIds.contains(chunk.getSegId())
+                    && !state.getTotalSegIds().contains(chunk.getSegId())
                     && !addedSegIds.contains(chunk.getSegId())) {
                 results.add(new RetrievalResult(
                         chunk.getSegId(), 0.8, state.getCurrentRound(), "adjacent"));
@@ -239,13 +239,13 @@ public class ReActRetrievalService {
      */
     private List<DocumentChunk> mergeAndRerank(ReActState state) {
         // 1. 根据 totalSegIds 查询所有切片
-        List<String> segIds = state.getTotalSegIds();
+        Set<String> segIds = state.getTotalSegIds();
         if (segIds == null || segIds.isEmpty()) {
             logger.warn("全局切片ID集合为空，返回空列表");
             return new ArrayList<>();
         }
 
-        List<DocumentChunk> allChunks = chunkRepository.queryBySegIds(segIds);
+        List<DocumentChunk> allChunks = chunkRepository.queryBySegIds(new ArrayList<>(segIds));
         if (allChunks == null || allChunks.isEmpty()) {
             logger.warn("查询切片返回空，返回空列表");
             return new ArrayList<>();
@@ -283,13 +283,13 @@ public class ReActRetrievalService {
      */
     private List<DocumentChunk> postProcess(ReActState state) {
         // 1. 查询最终全集
-        List<String> segIds = state.getTotalSegIds();
+        Set<String> segIds = state.getTotalSegIds();
         if (segIds == null || segIds.isEmpty()) {
             logger.warn("全局切片ID集合为空，返回空列表");
             return new ArrayList<>();
         }
 
-        List<DocumentChunk> finalChunks = chunkRepository.queryBySegIds(segIds);
+        List<DocumentChunk> finalChunks = chunkRepository.queryBySegIds(new ArrayList<>(segIds));
         if (finalChunks == null || finalChunks.isEmpty()) {
             logger.warn("查询最终切片返回空，返回空列表");
             return new ArrayList<>();

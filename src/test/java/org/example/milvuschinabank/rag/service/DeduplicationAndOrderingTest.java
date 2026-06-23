@@ -153,7 +153,6 @@ public class DeduplicationAndOrderingTest {
         logger.info("\n========== 测试4：多轮召回去重 - 跨轮次去重 ==========");
         
         ReActState state = new ReActState(5, 8000, 3);
-        state.setTotalSegIds(new ArrayList<>());
         state.setRoundResults(new ArrayList<>());
         
         // 第1轮
@@ -346,7 +345,7 @@ public class DeduplicationAndOrderingTest {
         
         // 模拟3轮召回
         List<DocumentChunk> allChunks = new ArrayList<>();
-        Set<String> totalSegIds = new HashSet<>();
+        Set<String> totalSegIds = state.getTotalSegIds();
         
         // 第1轮
         List<DocumentChunk> round1 = Arrays.asList(
@@ -436,9 +435,9 @@ public class DeduplicationAndOrderingTest {
     void testAllDuplicates() {
         logger.info("\n========== 测试12：边界条件 - 全部重复 ==========");
         
-        Set<String> totalSegIds = new HashSet<>();
-        totalSegIds.add("seg_1");
-        totalSegIds.add("seg_2");
+        ReActState state = new ReActState(5, 8000, 3);
+        state.getTotalSegIds().add("seg_1");
+        state.getTotalSegIds().add("seg_2");
         
         List<DocumentChunk> allDuplicates = Arrays.asList(
                 createChunk("seg_1", 1, "内容1"),
@@ -446,7 +445,7 @@ public class DeduplicationAndOrderingTest {
         );
         
         List<DocumentChunk> uniqueChunks = new ArrayList<>();
-        addUniqueChunks(allDuplicates, totalSegIds, uniqueChunks);
+        addUniqueChunks(allDuplicates, state.getTotalSegIds(), uniqueChunks);
         
         assertEquals(0, uniqueChunks.size(), "全部重复时不应该新增任何切片");
         

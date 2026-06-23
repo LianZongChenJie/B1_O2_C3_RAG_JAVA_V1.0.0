@@ -1,6 +1,8 @@
 package org.example.milvuschinabank.rag.model;
 
 import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
 
 /**
  * ReAct 召回状态
@@ -21,7 +23,7 @@ public class ReActState {
     /**
      * 当前已收集的切片ID集合（全局去重）
      */
-    private List<String> totalSegIds;
+    private Set<String> totalSegIds;
 
     /**
      * 当前上下文文本
@@ -65,6 +67,7 @@ public class ReActState {
         this.currentRound = 0;
         this.isFinished = false;
         this.currentContextLength = 0;
+        this.totalSegIds = new HashSet<>();
     }
 
     /**
@@ -126,11 +129,11 @@ public class ReActState {
         return maxRound;
     }
 
-    public List<String> getTotalSegIds() {
+    public Set<String> getTotalSegIds() {
         return totalSegIds;
     }
 
-    public void setTotalSegIds(List<String> totalSegIds) {
+    public void setTotalSegIds(Set<String> totalSegIds) {
         this.totalSegIds = totalSegIds;
     }
 
