@@ -159,9 +159,9 @@ public class TagExtractor {
             topicTags.add("topic:faq");
         }
 
-        // 检测是否包含标题特征
+        // 检测是否包含标题特征（使用 find() 而非 matches()，因为章节标题可能只是内容的一部分）
         for (Pattern pattern : chapterPatterns) {
-            if (pattern.matcher(content).matches()) {
+            if (pattern.matcher(content).find()) {
                 topicTags.add("topic:chapter");
                 break;
             }

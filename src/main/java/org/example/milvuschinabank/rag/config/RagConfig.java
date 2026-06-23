@@ -23,6 +23,8 @@ public class RagConfig {
 
     /**
      * 最大上下文长度（字符数）
+     * 注意：此值为字符数而非 token 数。中文约 1.5-2 字符/token，
+     * 8000 字符约等于 4000-5500 token。如需按 token 控制请调整此值。
      */
     private int maxContextLength = 8000;
 

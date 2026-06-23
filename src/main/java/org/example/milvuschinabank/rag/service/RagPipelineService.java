@@ -98,8 +98,8 @@ public class RagPipelineService {
                 retrievedChunks = reActRetrievalService.executeReActRetrieval(
                         expandedQuery, queryVector);
             } else {
-                // 简单向量检索（不使用 ReAct）
-                retrievedChunks = reActRetrievalService.executeReActRetrieval(
+                // 简单向量检索（不使用 ReAct 多轮循环，仅单轮召回）
+                retrievedChunks = reActRetrievalService.executeSimpleRetrieval(
                         expandedQuery, queryVector);
             }
 

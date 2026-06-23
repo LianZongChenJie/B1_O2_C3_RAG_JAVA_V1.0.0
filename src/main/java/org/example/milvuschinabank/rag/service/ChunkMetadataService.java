@@ -74,16 +74,23 @@ public class ChunkMetadataService {
             // 分配全局 pos（从 0 开始）
             chunk.setPos(i);
 
-            // 绑定前后邻接关系
+            // 先添加到列表，再绑定前后邻接关系
+            // 这样后续切片可以通过 processedChunks.get(i-1) 获取前一个切片的实际 segId
+            processedChunks.add(chunk);
+        }
+
+        // 绑定前后邻接关系（在所有 segId 生成后统一绑定，确保一致性）
+        for (int i = 0; i < processedChunks.size(); i++) {
+            DocumentChunk chunk = processedChunks.get(i);
+
             if (i > 0) {
                 chunk.setPreSegId(processedChunks.get(i - 1).getSegId());
             } else {
                 chunk.setPreSegId(null); // 首切片
             }
 
-            if (i < rawChunks.size() - 1) {
-                // 暂时设置为下一个，后续会更新
-                chunk.setNextSegId(generateSegId(docId, i + 1));
+            if (i < processedChunks.size() - 1) {
+                chunk.setNextSegId(processedChunks.get(i + 1).getSegId());
             } else {
                 chunk.setNextSegId(null); // 尾切片
             }
@@ -91,8 +98,6 @@ public class ChunkMetadataService {
             // 提取标签
             List<String> tags = tagExtractor.extractTags(rawChunks.get(i), docId, i);
             chunk.setTags(tags);
-
-            processedChunks.add(chunk);
         }
 
         logger.info("标签提取完成，共处理 {} 个切片", processedChunks.size());
@@ -223,7 +228,11 @@ public class ChunkMetadataService {
                 chunks.add(chunk);
             }
 
+            // 跳过截断点之后的空白字符，避免下一个切片以空白开头
             start = end;
+            while (start < length && Character.isWhitespace(content.charAt(start))) {
+                start++;
+            }
         }
 
         return chunks;

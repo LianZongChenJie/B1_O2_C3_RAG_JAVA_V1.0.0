@@ -540,11 +540,20 @@ public class MilvusChunkRepository {
 
         if (milvusConnected && milvusClient != null) {
             try {
-                // 构建 OR 过滤条件：tags 字段是逗号分隔的字符串，使用 LIKE 匹配
-                // 例如：tags LIKE "%biz:外汇%" OR tags LIKE "%biz:汇率%"
+                // 构建 OR 过滤条件：tags 字段是逗号分隔的字符串
+                // 使用精确边界匹配避免子串误命中
+                // 例如：匹配 biz:利率 时，需匹配 ",biz:利率," 或 "^biz:利率," 或 ",biz:利率$"
+                // 简化实现：利用 LIKE 匹配 ",tag," 和首尾边界
                 List<String> conditions = new ArrayList<>();
                 for (String tag : tags) {
-                    conditions.add("tags LIKE \"%" + tag + "%\"");
+                    // 匹配标签在中间：,tag,
+                    conditions.add("tags like \"%," + tag + ",%\"");
+                    // 匹配标签在开头：tag,...
+                    conditions.add("tags like \"" + tag + ",%\"");
+                    // 匹配标签在结尾：...,tag
+                    conditions.add("tags like \"%," + tag + "\"");
+                    // 匹配唯一标签：tag
+                    conditions.add("tags == \"" + tag + "\"");
                 }
                 String filter = String.join(" or ", conditions);
                 return executeQuery(filter);

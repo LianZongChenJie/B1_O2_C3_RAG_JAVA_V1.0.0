@@ -35,6 +35,47 @@ public class ReActRetrievalService {
     private QualityEvaluator qualityEvaluator;
 
     /**
+     * 简单单轮召回（不使用 ReAct 多轮循环）
+     * 仅执行一次向量召回 + 邻接拉取 + 去重排序
+     * @param userQuery 用户查询
+     * @param queryVector 查询向量
+     * @return 召回的有序切片列表
+     */
+    public List<DocumentChunk> executeSimpleRetrieval(String userQuery, List<Float> queryVector) {
+        logger.info("执行简单单轮召回，查询: {}", userQuery);
+
+        // 1. 向量召回
+        List<DocumentChunk> vectorResults = vectorSearch(queryVector, ragConfig.getVectorTopK());
+        logger.info("向量召回返回 {} 个切片", vectorResults.size());
+
+        // 2. 拉取相邻切片
+        List<DocumentChunk> adjacentChunks = fetchAdjacentChunks(vectorResults);
+        logger.info("拉取相邻切片 {} 个", adjacentChunks.size());
+
+        // 3. 合并去重
+        Set<String> seen = new HashSet<>();
+        List<DocumentChunk> allChunks = new ArrayList<>();
+        for (DocumentChunk chunk : vectorResults) {
+            if (chunk != null && chunk.getSegId() != null && seen.add(chunk.getSegId())) {
+                allChunks.add(chunk);
+            }
+        }
+        for (DocumentChunk chunk : adjacentChunks) {
+            if (chunk != null && chunk.getSegId() != null && seen.add(chunk.getSegId())) {
+                allChunks.add(chunk);
+            }
+        }
+
+        // 4. 按 pos 升序排序
+        allChunks.sort(Comparator
+                .comparing(chunk -> chunk.getPos() != null ? chunk.getPos() : Integer.MAX_VALUE)
+        );
+
+        logger.info("简单召回完成，最终切片数: {}", allChunks.size());
+        return allChunks;
+    }
+
+    /**
      * 执行 ReAct 多轮召回
      * @param userQuery 用户查询
      * @param queryVector 查询向量
@@ -55,15 +96,15 @@ public class ReActRetrievalService {
 
         // 多轮循环
         while (!state.isFinished()) {
-            state.nextRound();
-
-            // 1. 终止条件检查
+            // 1. 终止条件检查（在 nextRound 之前检查，避免 off-by-one）
             ReActState.TerminationCheckResult terminationCheck = state.checkTermination();
             if (terminationCheck.shouldTerminate()) {
                 logger.info("终止召回: {}", terminationCheck.getReason());
                 state.finish(terminationCheck.getReason());
                 break;
             }
+
+            state.nextRound();
 
             logger.info("========== 第 {} 轮召回 ==========", state.getCurrentRound());
 
@@ -154,19 +195,29 @@ public class ReActRetrievalService {
         List<DocumentChunk> adjacentChunks = fetchAdjacentChunks(newResults);
         logger.info("拉取相邻切片 {} 个", adjacentChunks.size());
 
-        // 4. 合并本轮结果（向量召回 + 相邻切片）
+        // 4. 合并本轮结果（向量召回 + 相邻切片），总数量不超过 maxAddSegPerRound
         Set<String> addedSegIds = new HashSet<>();
+        int addedCount = 0;
 
-        // 4.1 添加向量召回结果
+        // 4.1 添加向量召回结果（优先，计入单轮限制）
         for (DocumentChunk chunk : newResults) {
+            if (addedCount >= ragConfig.getMaxAddSegPerRound()) {
+                logger.warn("已达到单轮最大新增切片数限制 {}, 停止添加", ragConfig.getMaxAddSegPerRound());
+                break;
+            }
             results.add(new RetrievalResult(
                     chunk.getSegId(), 1.0, state.getCurrentRound(), "vector"));
             addedSegIds.add(chunk.getSegId());
+            addedCount++;
         }
 
-        // 4.2 添加相邻切片（去重）
+        // 4.2 添加相邻切片（剩余配额，计入单轮限制）
         int adjacentAddedCount = 0;
         for (DocumentChunk chunk : adjacentChunks) {
+            if (addedCount >= ragConfig.getMaxAddSegPerRound()) {
+                logger.warn("已达到单轮最大新增切片数限制 {}, 停止添加相邻切片", ragConfig.getMaxAddSegPerRound());
+                break;
+            }
             if (chunk != null && chunk.getSegId() != null
                     && !state.getTotalSegIds().contains(chunk.getSegId())
                     && !addedSegIds.contains(chunk.getSegId())) {
@@ -174,9 +225,10 @@ public class ReActRetrievalService {
                         chunk.getSegId(), 0.8, state.getCurrentRound(), "adjacent"));
                 addedSegIds.add(chunk.getSegId());
                 adjacentAddedCount++;
+                addedCount++;
             }
         }
-        logger.info("新增相邻切片 {} 个（去重后）", adjacentAddedCount);
+        logger.info("新增相邻切片 {} 个（去重后），本轮共新增 {} 个", adjacentAddedCount, addedCount);
 
         // 5. 更新全局去重集合
         state.getTotalSegIds().addAll(addedSegIds);
@@ -251,10 +303,18 @@ public class ReActRetrievalService {
             return new ArrayList<>();
         }
 
-        // 2. 按 pos 升序强制顺序规整（null 安全）
+        // 2. 全局去重（segId 维度，避免 queryBySegIds 返回重复切片）
+        Map<String, DocumentChunk> dedupMap = new java.util.LinkedHashMap<>();
+        for (DocumentChunk chunk : allChunks) {
+            if (chunk != null && chunk.getSegId() != null) {
+                dedupMap.putIfAbsent(chunk.getSegId(), chunk);
+            }
+        }
+        allChunks = new ArrayList<>(dedupMap.values());
+
+        // 3. 按 pos 升序强制顺序规整（null 安全：null 排最后）
         allChunks.sort(Comparator
-                .comparingInt(DocumentChunk::getPos)
-                .thenComparing(DocumentChunk::getSegId, Comparator.naturalOrder())
+                .comparing(chunk -> chunk.getPos() != null ? chunk.getPos() : Integer.MAX_VALUE)
         );
 
         return allChunks;
@@ -298,10 +358,9 @@ public class ReActRetrievalService {
             return new ArrayList<>();
         }
 
-        // 2. 按 pos 升序排序（null 安全）
+        // 2. 按 pos 升序排序（null 安全：null 排最后）
         finalChunks.sort(Comparator
-                .comparingInt(DocumentChunk::getPos)
-                .thenComparing(DocumentChunk::getSegId, Comparator.naturalOrder())
+                .comparing(chunk -> chunk.getPos() != null ? chunk.getPos() : Integer.MAX_VALUE)
         );
 
         // 3. 合并相邻重复语句/冗余
@@ -312,7 +371,10 @@ public class ReActRetrievalService {
                 .filter(chunk -> chunk != null && isValidContent(chunk.getContent()))
                 .collect(Collectors.toList());
 
-        // 注：合并重复内容后 pos 顺序已保持不变，无需再次排序
+        // 5. 再次按 pos 升序排序（合并和过滤可能改变顺序）
+        finalChunks.sort(Comparator
+                .comparing(chunk -> chunk.getPos() != null ? chunk.getPos() : Integer.MAX_VALUE)
+        );
 
         return finalChunks;
     }
@@ -406,7 +468,13 @@ public class ReActRetrievalService {
                 .count();
         double chineseRatio = (double) chineseCharCount / content.length();
 
-        // 替换字符不超过10% 且 中文字符超过10%
-        return replacementRatio < 0.1 && chineseRatio > 0.1;
+        // 替换字符不超过10% 且 (中文字符超过10% 或 可打印字符超过60%)
+        // 统一标准：与 QaIntegrationService.isNotGarbled 保持一致
+        long printableCount = content.chars()
+                .filter(c -> (c >= 32 && c <= 126) || c >= 0x4E00)
+                .count();
+        double printableRatio = (double) printableCount / content.length();
+
+        return replacementRatio < 0.1 && (chineseRatio > 0.1 || printableRatio > 0.6);
     }
 }

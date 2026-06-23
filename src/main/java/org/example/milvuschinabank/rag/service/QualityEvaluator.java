@@ -99,8 +99,31 @@ public class QualityEvaluator {
             return true;
         }
 
-        // 简单解析：检查是否包含 "need_more_context\": true"
-        return response.contains("\"need_more_context\": true") ||
-               response.contains("\"need_more_context\":true");
+        String normalized = response.toLowerCase().replaceAll("\\s+", "");
+
+        // 优先检查 need_more_context: false（质量达标，不需要更多上下文）
+        if (normalized.contains("\"need_more_context\":false")) {
+            return false;
+        }
+
+        // 检查 need_more_context: true（需要更多上下文）
+        if (normalized.contains("\"need_more_context\":true")) {
+            return true;
+        }
+
+        // 兜底：尝试从 JSON 中提取布尔值
+        try {
+            // 简单正则提取 need_more_context 的值
+            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(
+                    "\"need_more_context\"\\s*:\\s*(true|false)").matcher(response);
+            if (matcher.find()) {
+                return Boolean.parseBoolean(matcher.group(1));
+            }
+        } catch (Exception e) {
+            logger.warn("解析质量评估响应异常: {}", e.getMessage());
+        }
+
+        // 无法解析时默认继续召回（但不会无限循环，因为有 MaxRound 兜底）
+        return true;
     }
 }

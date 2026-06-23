@@ -44,8 +44,12 @@ public class QaIntegrationService {
         // 2. 剔除空文本与乱码
         List<DocumentChunk> validChunks = filterInvalidContent(deduplicatedChunks);
 
-        // 3. 再次按 pos 排序（确保顺序）
-        validChunks.sort((a, b) -> a.getPos().compareTo(b.getPos()));
+        // 3. 再次按 pos 排序（确保顺序，null 安全）
+        validChunks.sort((a, b) -> {
+            int posA = a.getPos() != null ? a.getPos() : Integer.MAX_VALUE;
+            int posB = b.getPos() != null ? b.getPos() : Integer.MAX_VALUE;
+            return Integer.compare(posA, posB);
+        });
 
         logger.info("后处理完成，有效切片数: {}", validChunks.size());
 
@@ -152,6 +156,7 @@ public class QaIntegrationService {
 
     /**
      * 检查是否为乱码
+     * 金融文档可能包含大量数字和英文（如"USD 2.5%"），因此检测逻辑更加灵活
      */
     private boolean isNotGarbled(DocumentChunk chunk) {
         String content = chunk.getContent();
@@ -160,21 +165,31 @@ public class QaIntegrationService {
             return false;
         }
 
-        // 检查中文字符比例（至少 30%）
+        // 检查中文字符数量
         long chineseCount = content.chars()
                 .filter(c -> c >= 0x4E00 && c <= 0x9FFF)
                 .count();
 
-        double chineseRatio = (double) chineseCount / content.length();
-
-        // 检查可打印字符比例（至少 80%）
+        // 检查可打印字符数量（包括中英文、数字、标点）
         long printableCount = content.chars()
-                .filter(c -> c >= 32 && c <= 126 || c >= 0x4E00)
+                .filter(c -> 
+                    (c >= 32 && c <= 126) ||  // ASCII 可打印字符
+                    (c >= 0x4E00 && c <= 0x9FFF) ||  // 中文字符
+                    (c >= 0x3040 && c <= 0x30FF) ||  // 日文假名
+                    (c >= 0xAC00 && c <= 0xD7AF)     // 韩文
+                )
                 .count();
 
         double printableRatio = (double) printableCount / content.length();
 
-        return chineseRatio >= 0.3 && printableRatio >= 0.8;
+        // 检查有效内容比例：可打印字符至少 80%
+        // 对于金融文档，允许中英文混合（中文比例可以很低，如包含大量数字和英文的报表）
+        // 但必须至少有一定量的有效字符
+        boolean hasValidContent = chineseCount > 0 || 
+                content.chars().filter(c -> c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z').count() > 0 ||
+                content.chars().filter(c -> c >= '0' && c <= '9').count() > 0;
+
+        return printableRatio >= 0.8 && hasValidContent;
     }
 
     /**
