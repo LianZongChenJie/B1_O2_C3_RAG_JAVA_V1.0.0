@@ -251,8 +251,11 @@ public class ReActRetrievalService {
             return new ArrayList<>();
         }
 
-        // 2. 按 pos 升序强制顺序规整
-        allChunks.sort(Comparator.comparingInt(DocumentChunk::getPos));
+        // 2. 按 pos 升序强制顺序规整（null 安全）
+        allChunks.sort(Comparator
+                .comparingInt(DocumentChunk::getPos)
+                .thenComparing(DocumentChunk::getSegId, Comparator.naturalOrder())
+        );
 
         return allChunks;
     }
@@ -295,8 +298,11 @@ public class ReActRetrievalService {
             return new ArrayList<>();
         }
 
-        // 2. 按 pos 升序排序
-        finalChunks.sort(Comparator.comparingInt(DocumentChunk::getPos));
+        // 2. 按 pos 升序排序（null 安全）
+        finalChunks.sort(Comparator
+                .comparingInt(DocumentChunk::getPos)
+                .thenComparing(DocumentChunk::getSegId, Comparator.naturalOrder())
+        );
 
         // 3. 合并相邻重复语句/冗余
         finalChunks = mergeDuplicateContent(finalChunks);
@@ -390,11 +396,17 @@ public class ReActRetrievalService {
             return false;
         }
 
-        // 检查是否包含足够的中文字符（排除乱码）
+        // 检测乱码（替换字符比例）
+        long replacementCount = content.chars().filter(ch -> ch == '\uFFFD').count();
+        double replacementRatio = (double) replacementCount / content.length();
+
+        // 同时检查中文字符比例
         long chineseCharCount = content.chars()
                 .filter(c -> c >= 0x4E00 && c <= 0x9FFF)
                 .count();
+        double chineseRatio = (double) chineseCharCount / content.length();
 
-        return chineseCharCount > content.length() * 0.3; // 至少 30% 是中文字符
+        // 替换字符不超过10% 且 中文字符超过10%
+        return replacementRatio < 0.1 && chineseRatio > 0.1;
     }
 }

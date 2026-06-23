@@ -344,6 +344,7 @@ public class DeduplicationAndOrderingTest {
         logger.info("\n========== 测试10：完整流程 - 多轮去重 + pos 排序 + 内容过滤 ==========");
         
         // 模拟3轮召回
+        ReActState state = new ReActState(5, 8000, 3);
         List<DocumentChunk> allChunks = new ArrayList<>();
         Set<String> totalSegIds = state.getTotalSegIds();
         
